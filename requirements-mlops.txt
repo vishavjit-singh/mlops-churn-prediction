@@ -1,0 +1,4 @@
+# The MLOps tooling: installed in CI and Docker; the pipeline falls back to a local tracker without MLflow.
+-r requirements.txt
+mlflow>=2.16,<3
+dvc>=3.50,<4

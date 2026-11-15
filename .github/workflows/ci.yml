@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: lint, tests, demo (local tracker)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: pytest -q
+      - run: make demo
+        env:
+          CHURN_TRACKER: local
+      - uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.12'
+        with:
+          name: report-images
+          path: docs/images/*.png
+
+  mlops:
+    name: dvc repro + MLflow tracking and registry
+    runs-on: ubuntu-latest
+    env:
+      CHURN_TRACKER: mlflow
+      MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-mlops.txt && pip install -e . --no-deps
+      - name: Run the pipeline with DVC
+        run: dvc repro
+      - run: dvc metrics show
+      - name: Nothing changed, so a second repro skips every stage
+        run: dvc repro | tee repro2.log && grep -q "didn't change, skipping" repro2.log
+      - name: The champion alias points at a registered version
+        run: |
+          python - <<'PY'
+          from mlflow import MlflowClient
+          v = MlflowClient().get_model_version_by_alias("churn-classifier", "champion")
+          print("champion = version", v.version, "from run", v.run_id)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mlflow-and-dvc
+          path: |
+            mlflow.db
+            mlruns/
+            dvc.lock
+            metrics/
+
+  docker:
+    name: Docker image + API smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t churn-api .
+      - run: docker run -d -p 8000:8000 --name api churn-api
+      - name: Call the API
+        run: |
+          for i in $(seq 1 30); do curl -sf localhost:8000/health && break; sleep 1; done
+          curl -sf localhost:8000/model
+          curl -sf -X POST localhost:8000/predict -H 'content-type: application/json' -d '{"customer_id":"X1",
+            "tenure_months":3,"contract":"month-to-month","internet_service":"fiber","payment_method":"cash",
+            "monthly_charges":120,"total_charges":360,"support_calls_90d":4,"data_usage_gb":80,"num_addons":0,
+            "late_payments_12m":2,"senior":0,"has_partner":0,"region":"north"}'

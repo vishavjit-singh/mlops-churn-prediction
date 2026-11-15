@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+build/
+# pipeline outputs: produced by `dvc repro` / `make demo`, tracked by DVC rather than git
+/data/
+/models/
+/metrics/
+/plots/
+/reports/
+# tracking stores
+/mlruns/
+/mlruns_local/
+/mlflow.db

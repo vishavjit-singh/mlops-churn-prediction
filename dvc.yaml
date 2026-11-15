@@ -1,0 +1,97 @@
+stages:
+  generate:
+    cmd: python -m churn generate
+    deps:
+      - src/churn/generate.py
+    params:
+      - generate
+    outs:
+      - data/raw/customers.csv
+
+  prepare:
+    cmd: python -m churn prepare
+    deps:
+      - data/raw/customers.csv
+      - src/churn/schema.py
+    params:
+      - prepare
+    outs:
+      - data/prepared/train.csv
+      - data/prepared/test.csv
+      - reports/data_report.json:
+          cache: false
+    metrics:
+      - metrics/data.json:
+          cache: false
+
+  train:
+    cmd: python -m churn train
+    deps:
+      - data/prepared/train.csv
+      - src/churn/features.py
+      - src/churn/tracking.py
+    params:
+      - train
+    outs:
+      - models/model.joblib
+      - models/metadata.json:
+          cache: false
+    metrics:
+      - metrics/train.json:
+          cache: false
+
+  evaluate:
+    cmd: python -m churn evaluate
+    deps:
+      - data/prepared/test.csv
+      - models/model.joblib
+    params:
+      - evaluate
+    outs:
+      - models/evaluation.json:
+          cache: false
+    metrics:
+      - metrics/eval.json:
+          cache: false
+    plots:
+      - plots/roc.csv:
+          cache: false
+          x: fpr
+          y: tpr
+      - plots/pr.csv:
+          cache: false
+          x: recall
+          y: precision
+      - plots/calibration.csv:
+          cache: false
+          x: mean_predicted
+          y: fraction_churned
+      - plots/threshold_cost.csv:
+          cache: false
+          x: threshold
+          y: cost_per_customer
+      - plots/importance.csv:
+          cache: false
+          template: bar_horizontal_sorted
+          x: importance
+          y: feature
+
+  monitor:
+    cmd: python -m churn monitor
+    deps:
+      - data/prepared/train.csv
+      - data/prepared/test.csv
+      - models/model.joblib
+      - src/churn/monitoring.py
+    params:
+      - monitor
+    outs:
+      - data/monitor/batch.csv
+      - data/monitor/batch_outcomes.csv
+      - reports/drift_report.json:
+          cache: false
+      - plots/drift.csv:
+          cache: false
+    metrics:
+      - metrics/drift.json:
+          cache: false

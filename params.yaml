@@ -1,0 +1,41 @@
+# Every number that changes the model lives here. DVC tracks it: change a value and `dvc repro`
+# re-runs only the stages that depend on it.
+generate:
+  seed: 42
+  n_customers: 12000
+
+prepare:
+  test_size: 0.2
+  seed: 7
+
+train:
+  cv_folds: 5
+  seed: 7
+  primary_metric: roc_auc
+  candidates:
+    logistic_regression:
+      C: 1.0
+    random_forest:
+      n_estimators: 300
+      max_depth: 10
+      min_samples_leaf: 5
+    hist_gradient_boosting:
+      learning_rate: 0.06
+      max_iter: 300
+      max_leaf_nodes: 15
+
+evaluate:
+  # Business costs used to pick the decision threshold (synthetic, illustrative):
+  # a missed churner loses ~ a year of margin, a retention offer costs a discount.
+  cost_false_negative: 300
+  cost_false_positive: 80
+  calibration_bins: 10
+
+monitor:
+  seed: 99
+  n_customers: 4000
+  psi_warn: 0.10
+  psi_retrain: 0.25
+  max_features_drifted: 2     # more features above psi_retrain than this → retrain
+  max_auc_drop: 0.03          # once outcomes arrive
+  max_calibration_gap: 0.05   # |observed churn − mean predicted churn|
